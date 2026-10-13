@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1117">
+<link rel="manifest" href="manifest.json">
+<title>My AI Assistant</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box} body{margin:0;background:#0e1117;color:#f0f3f6;padding-bottom:84px}
+header{position:sticky;top:0;z-index:10;background:#0e1117dd;backdrop-filter:blur(14px);padding:16px;border-bottom:1px solid #2d333b}
+h1{font-size:20px;margin:0} .sub{font-size:12px;color:#8b949e;margin-top:4px}
+main{padding:14px}.card{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:14px;margin-bottom:14px}
+textarea,input,select{width:100%;background:#0d1117;color:#fff;border:1px solid #30363d;border-radius:12px;padding:12px;font-size:16px}
+textarea{min-height:120px;resize:vertical}
+button{border:0;border-radius:12px;padding:12px 14px;font-size:16px;background:#238636;color:white;font-weight:600}
+button.alt{background:#30363d}.row{display:flex;gap:10px;flex-wrap:wrap}.row button{flex:1}
+pre{white-space:pre-wrap;word-break:break-word;background:#0d1117;border-radius:12px;padding:12px;max-height:340px;overflow:auto}
+nav{position:fixed;left:0;right:0;bottom:0;background:#161b22ee;backdrop-filter:blur(14px);border-top:1px solid #30363d;display:grid;grid-template-columns:repeat(4,1fr);padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+nav button{background:transparent;color:#c9d1d9;padding:8px;font-size:13px}.hidden{display:none}
+.msg{padding:10px 12px;border-radius:12px;margin:8px 0}.you{background:#1f6feb33}.ai{background:#30363d}
+.small{font-size:12px;color:#8b949e}.ok{color:#7ee787}.warn{color:#f2cc60}
+</style>
+</head>
+<body>
+<header>
+  <h1>My AI Assistant</h1>
+  <div class="sub">iPhone web app • add to Home Screen</div>
+</header>
+
+<main>
+<section id="chat" class="tab">
+  <div class="card">
+    <div id="messages"></div>
+    <textarea id="chatInput" placeholder="Ask me something..."></textarea>
+    <div class="row">
+      <button onclick="sendChat()">Send</button>
+      <button class="alt" onclick="clearChat()">Clear</button>
+    </div>
+    <div class="small" id="chatStatus">Set an AI backend in Settings for real AI responses.</div>
+  </div>
+</section>
+
+<section id="files" class="tab hidden">
+  <div class="card">
+    <h3>File Inspector</h3>
+    <input id="fileInput" type="file">
+    <p id="fileMeta" class="small">Choose a file from Files.</p>
+    <div class="row">
+      <button onclick="hashFile()">SHA-256</button>
+      <button class="alt" onclick="showText()">View as text</button>
+    </div>
+    <pre id="fileOutput">No file selected.</pre>
+  </div>
+</section>
+
+<section id="tools" class="tab hidden">
+  <div class="card">
+    <h3>Decode / Encode</h3>
+    <textarea id="toolInput" placeholder="Paste Base64, URL-encoded text, hex, or normal text..."></textarea>
+    <div class="row">
+      <button onclick="doTool('b64decode')">Base64 Decode</button>
+      <button onclick="doTool('b64encode')">Base64 Encode</button>
+    </div>
+    <div class="row">
+      <button class="alt" onclick="doTool('url')">URL Decode</button>
+      <button class="alt" onclick="doTool('hex')">Hex Decode</button>
+    </div>
+    <pre id="toolOutput"></pre>
+  </div>
+
+  <div class="card">
+    <h3>Shortcuts</h3>
+    <p class="small">Open Apple Shortcuts to run automations you create there.</p>
+    <button onclick="location.href='shortcuts://'">Open Shortcuts</button>
+  </div>
+</section>
+
+<section id="settings" class="tab hidden">
+  <div class="card">
+    <h3>AI Backend</h3>
+    <input id="backendUrl" placeholder="https://your-server.example.com/chat">
+    <p class="small">For safety, do not put a private API key directly in this web app. Use your own server endpoint.</p>
+    <button onclick="saveSettings()">Save</button>
+  </div>
+  <div class="card">
+    <h3>Install on iPhone</h3>
+    <p>In Safari: Share → <b>Add to Home Screen</b>.</p>
+  </div>
+</section>
+</main>
+
+<nav>
+  <button onclick="tab('chat')">Chat</button>
+  <button onclick="tab('files')">Files</button>
+  <button onclick="tab('tools')">Tools</button>
+  <button onclick="tab('settings')">Settings</button>
+</nav>
+
+<script>
+const $=id=>document.getElementById(id);
+let currentFile=null;
+
+function tab(id){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.add('hidden'));
+  $(id).classList.remove('hidden');
+}
+function addMsg(role,text){
+  const d=document.createElement('div');
+  d.className='msg '+(role==='You'?'you':'ai');
+  d.textContent=role+': '+text;
+  $('messages').appendChild(d);
+}
+function clearChat(){ $('messages').innerHTML=''; localStorage.removeItem('chatHistory'); }
+
+async function sendChat(){
+  const text=$('chatInput').value.trim(); if(!text)return;
+  addMsg('You',text); $('chatInput').value='';
+  const url=localStorage.getItem('backendUrl')||'';
+  if(!url){
+    addMsg('AI','No AI backend is connected yet. Go to Settings and add your server URL.');
+    return;
+  }
+  $('chatStatus').textContent='Thinking...';
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    const data=await r.json();
+    addMsg('AI',data.reply||data.message||JSON.stringify(data));
+    $('chatStatus').textContent='Connected';
+  }catch(e){
+    addMsg('AI','Could not reach the AI backend.');
+    $('chatStatus').textContent='Connection failed';
+  }
+}
+
+$('fileInput').addEventListener('change',e=>{
+  currentFile=e.target.files[0]||null;
+  if(currentFile) $('fileMeta').textContent=`${currentFile.name} • ${currentFile.size.toLocaleString()} bytes • ${currentFile.type||'unknown type'}`;
+});
+
+async function hashFile(){
+  if(!currentFile)return;
+  const buf=await currentFile.arrayBuffer();
+  const digest=await crypto.subtle.digest('SHA-256',buf);
+  const hex=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  $('fileOutput').textContent='SHA-256\n'+hex;
+}
+async function showText(){
+  if(!currentFile)return;
+  const text=await currentFile.text();
+  $('fileOutput').textContent=text.slice(0,200000);
+}
+
+function doTool(type){
+  const s=$('toolInput').value;
+  try{
+    let out='';
+    if(type==='b64decode') out=decodeURIComponent(escape(atob(s.replace(/\s/g,''))));
+    if(type==='b64encode') out=btoa(unescape(encodeURIComponent(s)));
+    if(type==='url') out=decodeURIComponent(s.replace(/\+/g,' '));
+    if(type==='hex'){
+      const clean=s.replace(/[^0-9a-f]/gi,'');
+      out=new TextDecoder().decode(new Uint8Array(clean.match(/.{1,2}/g).map(x=>parseInt(x,16))));
+    }
+    $('toolOutput').textContent=out;
+  }catch(e){ $('toolOutput').textContent='Could not decode that input.'; }
+}
+function saveSettings(){
+  localStorage.setItem('backendUrl',$('backendUrl').value.trim());
+  alert('Saved');
+}
+$('backendUrl').value=localStorage.getItem('backendUrl')||'';
+if('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');
+</script>
+</body>
+</html>

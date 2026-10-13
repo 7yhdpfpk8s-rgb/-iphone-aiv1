@@ -1,0 +1,9 @@
+{
+  "name": "My AI Assistant",
+  "short_name": "AI Assistant",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0e1117",
+  "theme_color": "#0e1117",
+  "icons": []
+}
